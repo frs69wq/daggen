@@ -1,0 +1,83 @@
+DAGGEN: A synthetic task graph generator
+
+This program generates random, synthetic task graphs for the purpose of 
+simulation. This is useful, for instance, to evaluate scheduling algorithms 
+that must be tested over a wide range of application configurations. 
+
+The program outputs files that describe DAGs as set of nodes in two different 
+formats. First we define an intuitive file format whose basic line format is
+
+NODE <index> <children list> <node type> <node cost> <parallelization overhead>
+
+Nodes can have four different types:
+  * ROOT          A unique artificial entry node with zero cost with no 
+                  predecessor and with the DAG's entry node(s) as successor(s).
+  * COMPUTATION   A computation task is defined by an index, a list of children
+                  (transfers to dependent tasks), a sequential cost (in Flop), 
+                  and an extra parameter that can be used for whatever purposes.
+                  For instance, we used that parameter to encode the overhead of
+                  parallelization of tasks (e.g., the alpha parameter of 
+                  Amdahl's Law) in parallel task graphs.
+  * TRANSFER      A communication task is defined by an index, one child (the 
+                  receiving task), and an amount of data (in Bytes)
+  * END           A unique artificial exit node with zero cost with no successor
+                  and with the DAG's exit node(s) as predecessor(s). 
+
+The second available format is the popular DOT format. This output format is 
+activated by adding the --dot flag to the command line. In this format, the 
+dummy 'ROOT' and 'END' nodes are not produced. The basic line for a COMPUTATION
+is
+
+<index> [size="<node cost>", alpha="parallelization overhead"]
+
+while that for a TRANSFER is 
+
+<src_index> -> <dst_index> [size ="<node_cost>"]
+
+DAGGEN generates task graphs based on the following popular parameters:
+  --n         Number of computation nodes in the DAG (i.e., application "tasks")
+  --mindata   Minimum size of data processed by a task
+  --maxdata   Maximum size of data processed by a task
+  --minalpha  Minimum value for extra parameter (e.g., Amdahl's law parameter)
+  --maxalpha  Minimum value for extra parameter (e.g., Amdahl's law parameter)
+  --fat       Width of the DAG, that is maximum number of tasks that can be 
+              executed concurrently. A small value will lead to a thin DAG 
+              (e.g., chain) with a low task parallelism, while a large value 
+              induces a fat DAG (e.g., fork-join) with a high degree of 
+              parallelism
+  --density   Determines the numbers of dependencies between taks of two 
+              consecutive DAG levels.  
+  --regular   Regularity of the distribution of tasks between the different 
+              levels of the DAG
+  --ccr       Communication to computation ratio. In the current version this 
+              parameter in fact merely encodes the complexity of the computation
+              of a task depending on the number of elements in the dataset if 
+              processes, n. This number of elements depend on the amount of data
+              processed by a task. The encoding is as follows:
+                 1 : a . n (a is a constant picked randomly between 26 and 29)
+                 2 : a . n log n
+                 3 : n3/2
+                 0 : Random choice among the three complexities
+  --jump      Maximum number of levels spanned by inter-task communications. 
+              This allows to generate DAGs with execution paths of different 
+              lengths
+
+DAGGEN creates random DAGs through the following process:
+  1) Generate the tasks
+     a) Determine the perfect number of tasks per levels in the DAG according to
+        the values of the -n and --fat parameters: e fat * log(n)
+     b) Assign a number of tasks per level according to the --regular parameter.
+        Pick a random number around the perfect value with (100*(1-regular))% of
+        latitude. For example, if regular is equal to 0.2, the number of tasks
+        will be picked within [0.2*perfect; 1.8*perfect].
+     c) Assign a cost to each task. This depends on --mindata, --maxdata (to 
+        determine the size of the handled data) and --ccr.
+     d) Pick a random alpha between --minalpha and --maxalpha 
+  2) Generate the dependencies. For each task we randomly assign a number of 
+     parents according to --density. The number of parents of a given tasks is 
+     then given by MIN(1+random(0, density * #tasks in previous level), #tasks 
+     in previous level). The --jump parameter allows the generator to select a 
+     parents in a level at a "jump" distance. Each parent is then randomly 
+     determined in the selected level.
+  3) Add Transfer costs. These costs derive from the size of the data handled by
+     the initiator of the transfer. 
