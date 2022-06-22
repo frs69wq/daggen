@@ -136,7 +136,19 @@ static void generateDependencies(DAG dag) {
       nb_parents = MIN(1 + (int)getRandomNumberBetween(0.0,
           global.density * (dag->nb_tasks_per_level[i-1])),
           dag->nb_tasks_per_level[i-1]);
-      for (k=0; k<nb_parents; k++) {
+      
+      /* at least one parent from the previous level,
+       * to enforce the pre-computed level*/
+      parent_index = (int)getRandomNumberBetween(0.0,
+          (double)(dag->nb_tasks_per_level[i-1]));
+      parent = dag->levels[i-1][parent_index];
+      /* update the parent's children list*/
+      parent->children = (Task *)realloc(parent->children,
+          (parent->nb_children+1)*sizeof(Task));
+      parent->children[(parent->nb_children)] = dag->levels[i][j];
+      (parent->nb_children)++;
+
+      for (k=0; k<nb_parents-1; k++) {
         /* compute the level of the parent */
         parent_level = (i-(int)getRandomNumberBetween( 1.0,
             (double)global.jump+1));
